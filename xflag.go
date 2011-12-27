@@ -1,44 +1,45 @@
 // Copyright, 2011 Steve Donovan
 // License MIT/X11
 
-//  Package xflag extends flag and provides methods to open files for reading and writing.
-//
-//  Usage:
-//
-//  It extends the flag.FlagSet type, so a FlagExtra must be explicitly
-//  created with xflag.NewFlag().
-//      import "xflag"
-//      var flag = xflag.NewFlag()
-//      var ip = flag.Int("d",404,"increment delta")
-//      var fp = flag.OpenFile("i","stdin","input file")
-//  OpenFile and CreateFile return pointers to the value, like the rest of
-//  the flag functions - in this case **os.File.
-//  You may specify non-flag parameters with #1, #2, etc:
-//      var sp = flag.String("#1","","device name")
-//  Together with this feature comes varargs support. In this case
-//  there can be an arbitrary number of integers starting at parameter 2:
-//      var ilp = flag.IntList("#2","","port list")
-//  Although typically used for multiple non-flag parameters,
-//  these both work as expected:
-//      $ prog1 10 20 30
-//      $ prog2 -list 10,20,30
-//  since internally the value is a comma-separated list.
-//
-//  Together with OpenFileList for variable number of input files, comes
-//  support for file pattern globbing on Windows, where the default
-//  shell does not do the usual expansion. Note that this function returns
-//  *[]string, since generally you don't want to open a potentially large
-//  number of files at once. However, it does guarantee that all of these
-//  files can be safely opened.
-//
-//  The ParseConfig() method provides a simple way to use flag-style
-//  variables with configuration files. These are assumed to be <var>=<value>
-//  pairs with # comments; blank lines are ignored.  Any detected wildcards
-//  are expanded for OpenFile on all platforms.  Vararg variables use comma
-//  separated values as above:
-//      ports=10,20,30  #  pports := flag.IntList("ports"...
-//      files=*.go,makfile # pfiles := flag.OpenFileList("files"...
-
+/*  
+    Package xflag extends flag and provides methods to open files for reading and writing.
+  
+    Usage:
+  
+    It extends the flag.FlagSet type, so a FlagExtra must be explicitly
+    created with xflag.NewFlag().
+        import "xflag"
+        var flag = xflag.NewFlag()
+        var ip = flag.Int("d",404,"increment delta")
+        var fp = flag.OpenFile("i","stdin","input file")
+    OpenFile and CreateFile return pointers to the value, like the rest of
+    the flag functions - in this case **os.File.
+    You may specify non-flag parameters with #1, #2, etc:
+        var sp = flag.String("#1","","device name")
+    Together with this feature comes varargs support. In this case
+    there can be an arbitrary number of integers starting at parameter 2:
+        var ilp = flag.IntList("#2","","port list")
+    Although typically used for multiple non-flag parameters,
+    these both work as expected:
+        $ prog1 10 20 30
+        $ prog2 -list 10,20,30
+    since internally the value is a comma-separated list.
+  
+    Together with OpenFileList for variable number of input files, comes
+    support for file pattern globbing on Windows, where the default
+    shell does not do the usual expansion. Note that this function returns
+    *[]string, since generally you don't want to open a potentially large
+    number of files at once. However, it does guarantee that all of these
+    files can be safely opened.
+  
+    The ParseConfig() method provides a simple way to use flag-style
+    variables with configuration files. These are assumed to be <var>=<value>
+    pairs with # comments; blank lines are ignored.  Any detected wildcards
+    are expanded for OpenFile on all platforms.  Vararg variables use comma
+    separated values as above:
+        ports=10,20,30  #  pports := flag.IntList("ports"...
+        files=*.go,makfile # pfiles := flag.OpenFileList("files"...
+*/
 package xflag
 
 import (
@@ -101,6 +102,7 @@ func glob (cmdline []string) []string {
     return xcmds
 }
 
+// Parse a set of parameters, optionally doing file glob expansion.
 func (fx *FlagExtra) Parse(cmdline []string, doGlob bool) {
     if doGlob {
         cmdline = glob(cmdline)
@@ -241,10 +243,12 @@ func (fx *FlagExtra) CreateFile(name, def, usage string) **os.File {
     return &file.f
 }
 
+// a convenient interface for implementing value lists
 type Converter interface {
     Convert(value string) bool
 }
 
+// a useful base class for value lists; implements ListValue
 type ValueList struct {
     name string
     converter Converter
@@ -265,19 +269,18 @@ func (this *ValueList) Set(value string) bool {
 }
 
 // mark as satisfying the ListValue interface
-
 func (this *ValueList)  ListValue() {}
 
 func makeValueList(def string) ValueList {
     return ValueList{def,nil}
 }
 
-type FilesValue struct {
+type filesValue struct {
     ValueList
     names []string
 }
 
-func (this *FilesValue) Convert(v string) bool {
+func (this *filesValue) Convert(v string) bool {
     file := newFileValue(v,true)
     if ! file.Set(v) {
         return false
@@ -292,7 +295,7 @@ func (this *FilesValue) Convert(v string) bool {
 // Generally only used with #n names, but the variable parameter functions
 // will also work with configuration files
 func (fx *FlagExtra) OpenFileList(name, def, usage string) *[]string {
-    filelist := &FilesValue{makeValueList(def),[]string{}}
+    filelist := &filesValue{makeValueList(def),[]string{}}
     filelist.converter = filelist
     fx.Var(filelist,name,usage)
     return &filelist.names
